@@ -1,9 +1,9 @@
 import numpy as np
 import cv2
 from matplotlib import pyplot as plt
-img = cv2.imread('/media/ubuntu/DATA/diatoms_patches/ulnaria.tif', 0)
+img = cv2.imread('/media/ubuntu/DATA/diatoms_patches/amphora.tif', 0)
 # Initiate FAST object with default values
-fast = cv2.FastFeatureDetector_create()
+fast = cv2.FastFeatureDetector_create(threshold=9)
 # find and draw the keypoints
 kp = fast.detect(img,None)
 img2 = cv2.drawKeypoints(img, kp, None, color=(255,0,0))
