@@ -130,16 +130,26 @@ if __name__ == "__main__":
                out=quant_semiglobal_hist[(i * 5):(i * 5 + 5)], casting="unsafe")
 
 
+    ## 16x5=80-histogram
     print('Local histograms')
     print(hists)
+
+
     print('Quantified histogram')
     print(quant_hist.reshape([16, 5]))
+
+    ## 5-degree histogram
     print('Global histogram')
     print(global_hist)
+
     print('Quantified global histogram')
     print(quant_global_hist)
+
+    ## 13x5=65 histogram
     print('Semiglobal histograms')
     print(semiglobal_hist)
+
+
     print('Quantified semiglobal histogram')
     print(quant_semiglobal_hist)
     print('Number of subimages -', subimage_index)

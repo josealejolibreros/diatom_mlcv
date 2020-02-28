@@ -1,7 +1,7 @@
 import cv2
 from matplotlib import pyplot as plt
 
-img = cv2.imread('/media/ubuntu/DATA/diatoms_patches/ulnaria.tif', 0)
+img = cv2.imread('ulnaria.tif', 0)
 corn = img.copy()
 
 dst = cv2.cornerHarris(img,3,5,0.22)

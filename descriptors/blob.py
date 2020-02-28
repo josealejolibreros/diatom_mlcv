@@ -1,9 +1,16 @@
 import cv2
 from matplotlib import pyplot as plt
 
-img = cv2.imread('/media/ubuntu/DATA/diatoms_patches/amphora.tif', 0)
+img = cv2.imread('ulnaria.tif', 0)
+
+## Detector
 detector = cv2.SimpleBlobDetector_create()
 keypoints = detector.detect(img)
+
+## Extractor
+br = cv2.BRISK_create();
+keypoints, descriptor = br.compute(img,  keypoints)
+print(descriptor)
 
 img2 = img.copy()
 for marker in keypoints:
