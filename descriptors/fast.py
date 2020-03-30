@@ -3,19 +3,27 @@ import cv2
 from matplotlib import pyplot as plt
 img = cv2.imread('ulnaria.tif', 0)
 
-## Detector
 
-# Initiate FAST object with default values
-fast = cv2.FastFeatureDetector_create(threshold=9)
-# find and draw the keypoints
-keypoints = fast.detect(img, None)
+def get_features(img, threshold=9):
 
-## Extractor
-br = cv2.BRISK_create();
-keypoints, descriptor = br.compute(img,  keypoints)
-print(descriptor)
+    ## Detector
+
+    # Initiate FAST object with default values
+    fast = cv2.FastFeatureDetector_create(threshold)
+    # find and draw the keypoints
+    keypoints = fast.detect(img, None)
+
+    ## Extractor
+    br = cv2.BRISK_create();
+    keypoints, descriptor = br.compute(img,  keypoints)
+    descriptor = np.asarray(descriptor)
+    #print(descriptor)
+
+    return descriptor
 
 
+
+'''
 img2 = cv2.drawKeypoints(img, keypoints, None, color=(255, 0, 0))
 # Print all default params
 print( "Threshold: {}".format(fast.getThreshold()) )
@@ -43,3 +51,4 @@ plt.imshow(img3,cmap = 'gray')
 plt.title('Fast Keypoints without nonmaxSuppression')
 
 plt.show()
+'''

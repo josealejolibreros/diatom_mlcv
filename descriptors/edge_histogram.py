@@ -18,7 +18,7 @@ QUANTIZER_MATRIX = np.array([[0.010867, 0.012266, 0.004193, 0.004174, 0.006778],
                              [0.358031, 0.411728, 0.161505, 0.151904, 0.356375],
                              [0.530128, 0.564319, 0.228960, 0.217745, 0.450972]])
 
-if __name__ == "__main__":
+def get_features(image):
 
     # obtain image filename
     '''
@@ -35,10 +35,10 @@ if __name__ == "__main__":
         sys.exit(0)
     dest_filename = sys.argv[2]
     '''
-    image_filename = 'ulnaria.tif'
-    dest_filename = "ulnaria_ehd.tif"
+    #image_filename = 'ulnaria.tif'
+    #dest_filename = "ulnaria_ehd.tif"
 
-    image = cv2.imread(image_filename)
+    #image = cv2.imread(image_filename)
 
     hists = np.zeros([16, 5])
 
@@ -130,6 +130,8 @@ if __name__ == "__main__":
                out=quant_semiglobal_hist[(i * 5):(i * 5 + 5)], casting="unsafe")
 
 
+    return hists
+    '''
     ## 16x5=80-histogram
     print('Local histograms')
     print(hists)
@@ -154,3 +156,4 @@ if __name__ == "__main__":
     print(quant_semiglobal_hist)
     print('Number of subimages -', subimage_index)
     print('Number of blocks -', block_index)
+    '''
