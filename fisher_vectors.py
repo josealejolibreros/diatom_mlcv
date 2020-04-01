@@ -7,6 +7,29 @@ from sklearn import svm
 from sklearn.ensemble import RandomForestClassifier
 from descriptors import fast, edge_histogram
 
+def pca(X):
+  # Data matrix X, assumes 0-centered
+  n, m = X.shape
+  #assert np.allclose(X.mean(axis=0), np.zeros(m))
+  # Compute covariance matrix
+  C = np.dot(X.T, X) / (n-1)
+  # Eigen decomposition
+  eigen_vals, eigen_vecs = np.linalg.eig(C)
+  # Project X onto PC space
+  X_pca = np.dot(X, eigen_vecs)
+  return X_pca
+
+def svd(X):
+  # Data matrix X, X doesn't need to be 0-centered
+  n, m = X.shape
+  # Compute full SVD
+  U, Sigma, Vh = np.linalg.svd(X,
+      full_matrices=False, # It's not necessary to compute the full matrix of U or V
+      compute_uv=True)
+  # Transform X with SVD components
+  X_svd = np.dot(U, np.diag(Sigma))
+  return X_svd
+
 def dictionary(descriptors, N):
     #em = cv2.EM(N)
     #em.train(descriptors)
@@ -15,6 +38,9 @@ def dictionary(descriptors, N):
     em.setClustersNumber(N)
     em.trainEM(descriptors)
     covs = em.getCovs()  # this was fixed only 2 weeks ago, so you might need an update
+    
+    #covs_inv = np.linalg.pinv(covs)
+    #covs = np.linalg.inv(covs_inv)
     print(covs)
 
     return np.float32(em.getMeans()), \
@@ -25,9 +51,25 @@ def image_descriptors(file):
     img = cv2.imread(file, 0)
     img = cv2.resize(img, (512, 512))
     #_, descriptors = cv2.SIFT().detectAndCompute(img, None)
-    fv_fast = fast.get_features(img).flatten()
-    fv_edge_hist = edge_histogram.get_features(img).flatten()
-    descriptors = np.hstack([fv_fast, fv_edge_hist])
+
+    fv_fast = fast.get_features(img)#.flatten()
+
+
+    fv_edge_hist = edge_histogram.get_features(img)#.flatten()
+    #To adjust same columns as FAST (64 columns)
+    columns_to_be_added = np.zeros((16, 59))
+    fv_edge_hist = np.hstack((fv_edge_hist, np.atleast_2d(columns_to_be_added)))
+
+    #descriptors = np.hstack([fv_fast, fv_edge_hist])
+
+    if len(fv_fast.shape) > 0:
+        descriptors = np.concatenate((fv_fast, fv_edge_hist), axis=0)
+    else:
+        print("tiene cero:")
+        descriptors = fv_edge_hist
+
+    descriptors = np.float32(pca(descriptors))
+
     print(file)
     return descriptors
 
@@ -167,7 +209,7 @@ def get_args():
 
 if __name__ == '__main__':
     args = get_args()
-    working_folder = '/media/ubuntu/MultimediaAn/ClassificationUV/ROIs/unmerged/training'
+    working_folder = '/home/ubuntu/Escritorio/training'
 
     print("ENTRANDO A GENERAR GMM")
 
