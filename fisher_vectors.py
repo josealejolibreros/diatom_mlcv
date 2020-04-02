@@ -5,30 +5,30 @@ from scipy.stats import multivariate_normal
 import time
 from sklearn import svm
 from sklearn.ensemble import RandomForestClassifier
-from descriptors import fast, edge_histogram
+from descriptors import fast, edge_histogram, lbp, hog
 
 def pca(X):
-  # Data matrix X, assumes 0-centered
-  n, m = X.shape
-  #assert np.allclose(X.mean(axis=0), np.zeros(m))
-  # Compute covariance matrix
-  C = np.dot(X.T, X) / (n-1)
-  # Eigen decomposition
-  eigen_vals, eigen_vecs = np.linalg.eig(C)
-  # Project X onto PC space
-  X_pca = np.dot(X, eigen_vecs)
-  return X_pca
+    # Data matrix X, assumes 0-centered
+    n, m = X.shape
+    #assert np.allclose(X.mean(axis=0), np.zeros(m))
+    # Compute covariance matrix
+    C = np.dot(X.T, X) / (n-1)
+    # Eigen decomposition
+    eigen_vals, eigen_vecs = np.linalg.eig(C)
+    # Project X onto PC space
+    X_pca = np.dot(X, eigen_vecs)
+    return X_pca
 
 def svd(X):
-  # Data matrix X, X doesn't need to be 0-centered
-  n, m = X.shape
-  # Compute full SVD
-  U, Sigma, Vh = np.linalg.svd(X,
+    # Data matrix X, X doesn't need to be 0-centered
+    n, m = X.shape
+    # Compute full SVD
+    U, Sigma, Vh = np.linalg.svd(X,
       full_matrices=False, # It's not necessary to compute the full matrix of U or V
       compute_uv=True)
-  # Transform X with SVD components
-  X_svd = np.dot(U, np.diag(Sigma))
-  return X_svd
+    # Transform X with SVD components
+    X_svd = np.dot(U, np.diag(Sigma))
+    return X_svd
 
 def dictionary(descriptors, N):
     #em = cv2.EM(N)
@@ -47,37 +47,62 @@ def dictionary(descriptors, N):
            np.float32(covs), np.float32(em.getWeights())[0]
 
 
-def image_descriptors(file):
+def get_vector_descriptors_all_image_patches(file):
     img = cv2.imread(file, 0)
+    print(file)
     img = cv2.resize(img, (512, 512))
-    #_, descriptors = cv2.SIFT().detectAndCompute(img, None)
+    windowsize_r = 64
+    windowsize_c = 64
+    descriptors_global = []
+    # Crop out the window and calculate the histogram
+    #for r in range(0,  img.shape[0] - windowsize_r, windowsize_r):
+    for r in range(0, img.shape[0] - 1, windowsize_r):
+        #for c in range(0, img.shape[1] - windowsize_c, windowsize_c):
+        for c in range(0, img.shape[1] - 1, windowsize_c):
+            window = img[r:r + windowsize_r, c:c + windowsize_c]
+            descriptors_vector_one_patch = image_descriptors(window)
+            descriptors_global.append(descriptors_vector_one_patch)
+            del descriptors_vector_one_patch
+    #descriptors_global = np.float32(pca(descriptors))
 
-    fv_fast = fast.get_features(img)#.flatten()
+    return descriptors_global
 
 
-    fv_edge_hist = edge_histogram.get_features(img)#.flatten()
-    #To adjust same columns as FAST (64 columns)
-    columns_to_be_added = np.zeros((16, 59))
-    fv_edge_hist = np.hstack((fv_edge_hist, np.atleast_2d(columns_to_be_added)))
+def image_descriptors(img):
+    # _, descriptors = cv2.SIFT().detectAndCompute(img, None)
 
-    #descriptors = np.hstack([fv_fast, fv_edge_hist])
+    grey_levels = 256
+
+    '''
+    fv_fast = fast.get_features(img)  # .flatten()
 
     if len(fv_fast.shape) > 0:
-        descriptors = np.concatenate((fv_fast, fv_edge_hist), axis=0)
+        # To adjust same columns as FAST (64 columns) (histogram of n FAST keypoints - dimension = 255)
+        hist_fast = np.histogram(fv_fast, bins=grey_levels)[0]
+
     else:
-        print("tiene cero:")
-        descriptors = fv_edge_hist
 
-    descriptors = np.float32(pca(descriptors))
+        hist_fast = np.zeros(256)
+    # Edge histograms (dimension = 80)
+    fv_edge_hist = np.hstack(edge_histogram.get_features(img))
+    '''
+    hist_lbp = lbp.get_features(img)
+    fv_hog = hog.get_features(img,orientations=8, pixels_per_cell=(16, 16),
+                                cells_per_block=(1, 1), visualize=True)
 
-    print(file)
+    # HOG + LBP (with current settings: 128 + 26)
+    descriptors = np.hstack([fv_hog, hist_lbp])
+
+
+
+    #print(file)
     return descriptors
 
 
 def folder_descriptors(folder):
     files = glob.glob(folder + "/*.tif")
     print("Calculating descriptos. Number of images is", len(files))
-    return np.concatenate([image_descriptors(file) for file in files])
+    return np.concatenate([get_vector_descriptors_all_image_patches(file) for file in files])
 
 
 def likelihood_moment(x, ytk, moment):
@@ -126,7 +151,7 @@ def normalize(fisher_vector):
 
 def fisher_vector(samples, means, covs, w):
     s0, s1, s2 = likelihood_statistics(samples, means, covs, w)
-    T = samples.shape[0]
+    T = np.array(samples).shape[0]
     covs = np.float32([np.diagonal(covs[k]) for k in range(0, covs.shape[0])])
     a = fisher_vector_weights(s0, s1, s2, means, covs, w, T)
     b = fisher_vector_means(s0, s1, s2, means, covs, w, T)
@@ -166,7 +191,7 @@ def generate_gmm(input_folder, N):
 
 def get_fisher_vectors_from_folder(folder, gmm):
     files = glob.glob(folder + "/*.tif")
-    return np.float32([fisher_vector(image_descriptors(file), *gmm) for file in files])
+    return np.float32([fisher_vector(get_vector_descriptors_all_image_patches(file), *gmm) for file in files])
 
 
 def fisher_features(folder, gmm):
@@ -209,7 +234,7 @@ def get_args():
 
 if __name__ == '__main__':
     args = get_args()
-    working_folder = '/home/ubuntu/Escritorio/training'
+    working_folder = '/home/ubuntu/Escritorio/training_prueba'
 
     print("ENTRANDO A GENERAR GMM")
 

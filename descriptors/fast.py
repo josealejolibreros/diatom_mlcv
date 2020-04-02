@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 img = cv2.imread('ulnaria.tif', 0)
 
 
-def get_features(img, threshold=9):
+def get_features(img, threshold=5000):
 
     ## Detector
 
