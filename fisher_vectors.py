@@ -6,6 +6,8 @@ import time
 from sklearn import svm
 from sklearn.ensemble import RandomForestClassifier
 from descriptors import fast, edge_histogram, lbp, hog
+import pickle
+
 
 def pca(X):
     # Data matrix X, assumes 0-centered
@@ -60,6 +62,7 @@ def get_vector_descriptors_all_image_patches(file):
         #for c in range(0, img.shape[1] - windowsize_c, windowsize_c):
         for c in range(0, img.shape[1] - 1, windowsize_c):
             window = img[r:r + windowsize_r, c:c + windowsize_c]
+            res = fourier_transform(window)
             descriptors_vector_one_patch = image_descriptors(window)
             descriptors_global.append(descriptors_vector_one_patch)
             del descriptors_vector_one_patch
@@ -99,6 +102,44 @@ def image_descriptors(img):
     return descriptors
 
 
+def fourier_transform(img):
+    dft = cv2.dft(np.float32(img), flags=cv2.DFT_COMPLEX_OUTPUT)
+    dft_shift = np.fft.fftshift(dft)
+
+    magnitude_spectrum = 20 * np.log(cv2.magnitude(dft_shift[:, :, 0], dft_shift[:, :, 1]))
+
+    rows, cols = img.shape
+    crow, ccol = rows / 2, cols / 2
+
+    # create a mask first, center square is 1, remaining all zeros
+    mask = np.zeros((rows, cols, 2), np.uint8)
+    mask[crow - 30:crow + 30, ccol - 30:ccol + 30] = 1
+
+    # apply mask and inverse DFT
+    fshift = dft_shift * mask
+    f_ishift = np.fft.ifftshift(fshift)
+    img_back = cv2.idft(f_ishift)
+    img_back = cv2.magnitude(img_back[:, :, 0], img_back[:, :, 1])
+
+    plt.subplot(121), plt.imshow(img, cmap='gray')
+    plt.title('Input Image'), plt.xticks([]), plt.yticks([])
+    plt.subplot(122), plt.imshow(img_back, cmap='gray')
+    plt.title('Magnitude Spectrum'), plt.xticks([]), plt.yticks([])
+    plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def folder_descriptors(folder):
     files = glob.glob(folder + "/*.tif")
     print("Calculating descriptos. Number of images is", len(files))
@@ -112,20 +153,25 @@ def likelihood_moment(x, ytk, moment):
 
 def likelihood_statistics(samples, means, covs, weights):
     gaussians, s0, s1, s2 = {}, {}, {}, {}
-    samples = zip(range(0, len(samples)), samples)
+    samples_2 = zip(range(0, len(samples)), samples)
 
     g = [multivariate_normal(mean=means[k], cov=covs[k]) for k in range(0, len(weights))]
-    for index, x in samples:
+    for index, x in samples_2:
         gaussians[index] = np.array([g_k.pdf(x) for g_k in g])
-
+    del index,x
     for k in range(0, len(weights)):
         s0[k], s1[k], s2[k] = 0, 0, 0
-        for index, x in samples:
-            probabilities = np.multiply(gaussians[index], weights)
+        #for index, x in samples:
+            #MODIFICADA LA SIGUIENTE LINEA
+        idx=0
+        for x in samples:
+
+            probabilities = np.multiply(gaussians[idx], weights)
             probabilities = probabilities / np.sum(probabilities)
             s0[k] = s0[k] + likelihood_moment(x, probabilities[k], 0)
             s1[k] = s1[k] + likelihood_moment(x, probabilities[k], 1)
             s2[k] = s2[k] + likelihood_moment(x, probabilities[k], 2)
+            idx=idx+1
 
     return s0, s1, s2
 
@@ -169,7 +215,13 @@ def fisher_vector(samples, means, covs, w):
     else:
         new_c = c
     fv = np.concatenate([new_a, new_b, new_c])
-    fv = normalize(fv)
+    import math
+    x = fv.min()
+    if math.isnan(x):
+        print("es nan")
+        fv = np.nan_to_num(fv)
+    else:
+        fv = normalize(fv)
     return fv
 
 
@@ -234,23 +286,52 @@ def get_args():
 
 if __name__ == '__main__':
     args = get_args()
-    working_folder = '/home/ubuntu/Escritorio/training_prueba'
+    model_folder = '.'
+    working_folder = '/home/ubuntu/Escritorio/training'
+    working_folder_test = '/home/ubuntu/Escritorio/test'
 
     print("ENTRANDO A GENERAR GMM")
 
     #gmm = load_gmm(working_folder)
     #Descomentar aqui si no ha sido generado gmm
-    gmm = generate_gmm(working_folder, args.number)
+
+    #gmm = generate_gmm(working_folder, args.number)
 
 
     #gmm = load_gmm(working_folder) if args.loadgmm else generate_gmm(working_folder, 5)
+    gmm = load_gmm(model_folder)
     print("GMM GENERADO")
 
-    print("ENTRANDO A GENERAR FISHER FEATURES")
-    fisher_features = fisher_features(working_folder, gmm)
-    print("FISHER FEATURES GENERADO")
+    '''
+    print("ENTRANDO A GENERAR FISHER FEATURES TRAINING")
+    fisher_features_training = fisher_features(working_folder, gmm)
+    print("FISHER FEATURES TRAINING GENERADO")
+
 
     # TBD, split the features into training and validation
-    classifier = train(gmm, fisher_features)
-    rate = success_rate(classifier, fisher_features)
-    print("Success rate is", rate)
+
+    
+    classifier = train(gmm, fisher_features_training)
+
+    rate = success_rate(classifier, fisher_features_training)
+    print("Success rate - validation -  is", rate)
+
+    
+
+    config_dictionary = {'remote_hostname': 'google.com', 'remote_port': 80}
+
+    with open('classifier.model', 'wb') as model_file:
+        pickle.dump(classifier, model_file)
+        print("Classification model saved")
+    '''
+
+    with open('classifier.model', 'rb') as model_file:
+        classifier = pickle.load(model_file)
+        print("Classification model loaded")
+
+
+    print("Generando fisher vectors test")
+    fisher_features_test = fisher_features(working_folder_test, gmm)
+    rate_test = success_rate(classifier, fisher_features_test)
+    print("Success rate - validation -  is", rate_test)
+    foo =0
