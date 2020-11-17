@@ -93,7 +93,6 @@ def get_stdev_histogram_highpass_masked_image(img):
 
     hist, bin_edges = np.histogram(img_back_rescaled)
     hist_standard_deviation = hist.std()
-    print(hist_standard_deviation)
 
 
 

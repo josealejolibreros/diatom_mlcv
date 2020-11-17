@@ -1,13 +1,16 @@
-import sys, glob, argparse
+import sys, glob, argparse, os
 import numpy as np
 import math, cv2
 from scipy.stats import multivariate_normal
 import time
 from sklearn import svm
 from sklearn.ensemble import RandomForestClassifier
-from descriptors import fast, edge_histogram, lbp, hog
+from descriptors import fast, edge_histogram, lbp, hog, zernike, grey_co_ocurrence_properties, pysift
 import pickle
+from sklearn.cluster import MiniBatchKMeans
 
+import matplotlib.pyplot as plt
+from descriptors.contour_properties import Contour
 
 def pca(X):
     # Data matrix X, assumes 0-centered
@@ -43,36 +46,139 @@ def dictionary(descriptors, N):
     
     #covs_inv = np.linalg.pinv(covs)
     #covs = np.linalg.inv(covs_inv)
-    print(covs)
+    #print(covs)
 
     return np.float32(em.getMeans()), \
            np.float32(covs), np.float32(em.getWeights())[0]
 
 
 def get_vector_descriptors_all_image_patches(file):
+    #print(file)
     img = cv2.imread(file, 0)
-    print(file)
+    #print(file)
+    #contour_global(img)
     img = cv2.resize(img, (512, 512))
+
+
+    #c = plt.imshow(img)
+    #plt.title('matplotlib.pyplot.imshow() function Example',
+    #          fontweight="bold")
+    #plt.show()
+
+
     windowsize_r = 64
     windowsize_c = 64
-    descriptors_global = []
-    # Crop out the window and calculate the histogram
-    #for r in range(0,  img.shape[0] - windowsize_r, windowsize_r):
+    descriptors_all_the_image = np.empty([0, 0])
+
     for r in range(0, img.shape[0] - 1, windowsize_r):
-        #for c in range(0, img.shape[1] - windowsize_c, windowsize_c):
         for c in range(0, img.shape[1] - 1, windowsize_c):
             window = img[r:r + windowsize_r, c:c + windowsize_c]
-            res = fourier_transform(window)
-            descriptors_vector_one_patch = image_descriptors(window)
-            descriptors_global.append(descriptors_vector_one_patch)
-            del descriptors_vector_one_patch
-    #descriptors_global = np.float32(pca(descriptors))
+            hist_standard_deviation = get_stdev_histogram_highpass_masked_image(window)
 
-    return descriptors_global
+            #After tests, hist highpass dft filtered image > 450  coresponds
+            #to a border
+            if hist_standard_deviation > 450:
+                descriptors_vector_one_patch = image_descriptors(window)
+                if descriptors_all_the_image.shape == (0,0):
+                    descriptors_all_the_image = descriptors_vector_one_patch
+                else:
+                    descriptors_all_the_image = np.vstack([descriptors_all_the_image, descriptors_vector_one_patch])
+                del descriptors_vector_one_patch
 
+    #print(descriptors_global)
+    return descriptors_all_the_image
+
+
+def contour_global(im):
+    imgray = im
+    thresh = cv2.adaptiveThreshold(imgray, 255, 0, 1, 11, 2)
+    contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    k = 1000
+    for cnt in contours:
+
+        # first shows the original image
+        im2 = im.copy()
+        c = Contour(imgray, cnt)
+        print
+        c.leftmost, c.rightmost
+        cv2.putText(im2, 'original image', (20, 20), cv2.FONT_HERSHEY_PLAIN, 1.0, (0, 255, 0))
+        #cv2.imshow('image', im2)
+        if cv2.waitKey(k) == 27:
+            break
+
+        im2 = im.copy()
+
+        # Now shows original contours, approximated contours, convex hull
+        cv2.drawContours(im2, [cnt], 0, (0, 255, 0), 4)
+        string1 = 'green : original contour'
+        cv2.putText(im2, string1, (20, 20), cv2.FONT_HERSHEY_PLAIN, 1.0, (0, 255, 0))
+        cv2.imshow('image', im2)
+        if cv2.waitKey(k) == 27:
+            break
+
+        approx = c.approx
+        cv2.drawContours(im2, [approx], 0, (255, 0, 0), 2)
+        string2 = 'blue : approximated contours'
+        cv2.putText(im2, string2, (20, 40), cv2.FONT_HERSHEY_PLAIN, 1.0, (0, 255, 0))
+        cv2.imshow('image', im2)
+        if cv2.waitKey(k) == 27:
+            break
+
+        hull = c.convex_hull
+        cv2.drawContours(im2, [hull], 0, (0, 0, 255), 2)
+        string3 = 'red : convex hull'
+        cv2.putText(im2, string3, (20, 60), cv2.FONT_HERSHEY_PLAIN, 1.0, (0, 255, 0))
+        cv2.imshow('image', im2)
+        if cv2.waitKey(k) == 27:
+            break
+
+        im2 = im.copy()
+
+        # Now mark centroid and bounding box on image
+        (cx, cy) = c.centroid
+        cv2.circle(im2, (int(cx), int(cy)), 5, (0, 255, 0), -1)
+        cv2.putText(im2, 'green : centroid', (20, 20), cv2.FONT_HERSHEY_PLAIN, 1.0, (0, 255, 0))
+
+        (x, y, w, h) = c.bounding_box
+        cv2.rectangle(im2, (x, y), (x + w, y + h), (0, 0, 255))
+        cv2.putText(im2, 'red : bounding rectangle', (20, 40), cv2.FONT_HERSHEY_PLAIN, 1.0, (0, 255, 0))
+
+        (center, axis, angle) = c.ellipse
+        cx, cy = int(center[0]), int(center[1])
+        ax1, ax2 = int(axis[0]), int(axis[1])
+        orientation = int(angle)
+        cv2.ellipse(im2, (cx, cy), (ax1, ax2), orientation, 0, 360, (255, 255, 255), 3)
+        cv2.putText(im2, 'white : fitting ellipse', (20, 60), cv2.FONT_HERSHEY_PLAIN, 1.0, (255, 255, 255))
+
+        cv2.circle(im2, c.leftmost, 5, (0, 255, 0), -1)
+        cv2.circle(im2, c.rightmost, 5, (0, 255, 0))
+        cv2.circle(im2, c.topmost, 5, (0, 0, 255), -1)
+        cv2.circle(im2, c.bottommost, 5, (0, 0, 255))
+        cv2.imshow('image', im2)
+        if cv2.waitKey(k) == 27:
+            break
+
+        # Now shows the filled image, convex image, and distance image
+        filledimage = c.filledImage
+        cv2.putText(filledimage, 'filledImage', (20, 20), cv2.FONT_HERSHEY_PLAIN, 1.0, 255)
+        cv2.imshow('image', filledimage)
+        if cv2.waitKey(k) == 27:
+            break
+
+        conveximage = c.convexImage
+        cv2.putText(conveximage, 'convexImage', (20, 20), cv2.FONT_HERSHEY_PLAIN, 1.0, 255)
+        cv2.imshow('image', conveximage)
+        if cv2.waitKey(k) == 27:
+            break
+
+        distance_image = c.distance_image()
+        cv2.imshow('image', distance_image)
+        cv2.putText(distance_image, 'distance_image', (20, 20), cv2.FONT_HERSHEY_PLAIN, 1.0, (255, 255, 255))
+        if cv2.waitKey(k) == 27:
+            break
 
 def image_descriptors(img):
-    # _, descriptors = cv2.SIFT().detectAndCompute(img, None)
+
 
     grey_levels = 256
 
@@ -90,42 +196,43 @@ def image_descriptors(img):
     fv_edge_hist = np.hstack(edge_histogram.get_features(img))
     '''
     hist_lbp = lbp.get_features(img)
-    fv_hog = hog.get_features(img,orientations=8, pixels_per_cell=(16, 16),
+    fv_hog = hog.get_features(img,orientations=8, pixels_per_cell=(64, 64),
                                 cells_per_block=(1, 1), visualize=True)
+    greycoprops_description_properties = grey_co_ocurrence_properties.get_features(img)
+
 
     # HOG + LBP (with current settings: 128 + 26)
-    descriptors = np.hstack([fv_hog, hist_lbp])
+    descriptors = np.concatenate([fv_hog, hist_lbp,greycoprops_description_properties])
 
 
-
-    #print(file)
     return descriptors
 
 
-def fourier_transform(img):
+def get_stdev_histogram_highpass_masked_image(img):
     dft = cv2.dft(np.float32(img), flags=cv2.DFT_COMPLEX_OUTPUT)
     dft_shift = np.fft.fftshift(dft)
 
-    magnitude_spectrum = 20 * np.log(cv2.magnitude(dft_shift[:, :, 0], dft_shift[:, :, 1]))
-
     rows, cols = img.shape
-    crow, ccol = rows / 2, cols / 2
+    crow, ccol = int(rows / 2), int(cols / 2)
 
     # create a mask first, center square is 1, remaining all zeros
-    mask = np.zeros((rows, cols, 2), np.uint8)
-    mask[crow - 30:crow + 30, ccol - 30:ccol + 30] = 1
+    mask = np.ones((rows, cols, 2), np.uint8)
+    mask[crow - 10:crow + 10, ccol - 10:ccol + 10] = 0
 
     # apply mask and inverse DFT
     fshift = dft_shift * mask
+
     f_ishift = np.fft.ifftshift(fshift)
     img_back = cv2.idft(f_ishift)
     img_back = cv2.magnitude(img_back[:, :, 0], img_back[:, :, 1])
 
-    plt.subplot(121), plt.imshow(img, cmap='gray')
-    plt.title('Input Image'), plt.xticks([]), plt.yticks([])
-    plt.subplot(122), plt.imshow(img_back, cmap='gray')
-    plt.title('Magnitude Spectrum'), plt.xticks([]), plt.yticks([])
-    plt.show()
+
+    img_back_rescaled = ((img_back - img_back.min()) * (1 / (img_back.max() - img_back.min()) * 255)).astype('uint8')
+
+    hist, bin_edges = np.histogram(img_back_rescaled)
+    hist_standard_deviation = hist.std()
+
+    return hist_standard_deviation
 
 
 
@@ -138,12 +245,10 @@ def fourier_transform(img):
 
 
 
-
-
-def folder_descriptors(folder):
+def folder_descriptors(folder, k, kmeans):
     files = glob.glob(folder + "/*.tif")
     print("Calculating descriptos. Number of images is", len(files))
-    return np.concatenate([get_vector_descriptors_all_image_patches(file) for file in files])
+    return np.concatenate([get_LocalsWithoutFisher(file, k, kmeans) for file in files])
 
 
 def likelihood_moment(x, ytk, moment):
@@ -218,15 +323,15 @@ def fisher_vector(samples, means, covs, w):
     import math
     x = fv.min()
     if math.isnan(x):
-        print("es nan")
+        #print("es nan")
         fv = np.nan_to_num(fv)
     else:
         fv = normalize(fv)
     return fv
 
 
-def generate_gmm(input_folder, N):
-    words = np.concatenate([folder_descriptors(folder) for folder in glob.glob(input_folder + '/*')])
+def generate_gmm(input_folder, N, k, kmeans):
+    words = np.concatenate([folder_descriptors(folder, k, kmeans) for folder in glob.glob(input_folder + '/*')])
     print("Training GMM of size", N)
     means, covs, weights = dictionary(words, N)
     # Throw away gaussians with weights that are too small:
@@ -240,15 +345,106 @@ def generate_gmm(input_folder, N):
     np.save("weights.gmm", weights)
     return means, covs, weights
 
+def generate_bof(input_folder):
+    classes = len(glob.glob(input_folder + '/*'))
+    total_samples = 0
+    for _, dirnames, filenames in os.walk(input_folder):
+        # ^ this idiom means "we won't be using this value"
+        total_samples += len(filenames)
+    dico = []
+    for folder in glob.glob(input_folder + '/*'):
+        if len(dico)>0:
+            dico = np.append(dico,folder_sift_description(folder),axis=0)
+        else:
+            dico = folder_sift_description(folder)
 
-def get_fisher_vectors_from_folder(folder, gmm):
+    #dico = np.concatenate([folder_sift_description(folder) for folder in glob.glob(input_folder + '/*')])
+
+
+    #step2
+    k = classes * 10
+    print(k)
+
+
+    batch_size = total_samples * 3
+    kmeans = MiniBatchKMeans(n_clusters=k, batch_size=batch_size, verbose=1).fit(dico)
+    return k, kmeans
+
+def folder_sift_description(folder):
     files = glob.glob(folder + "/*.tif")
-    return np.float32([fisher_vector(get_vector_descriptors_all_image_patches(file), *gmm) for file in files])
+    print("Calculating descriptos. Number of images is", len(files))
+    folder_dico = []
+    for file in files:
+        kp, des = extract_sift_features(file)
+        for d in des:
+            folder_dico.append(d)
+
+    return folder_dico
+
+def extract_sift_features(file):
+    img = cv2.imread(file,0)
+    img = cv2.resize(img,(256,256))
+    '''
+    kp, descriptors = pysift.computeKeypointsAndDescriptors(img,
+                                                            sigma=0.2,
+                                                            num_intervals=3,
+                                                            assumed_blur=0.5,
+                                                            image_border_width=5)
+    '''
+    sift = cv2.xfeatures2d.SIFT_create()
+    kp, descriptors = sift.detectAndCompute(img, None)
+
+    if (len(kp) == 0):
+        descriptors = np.zeros((1,128))
 
 
-def fisher_features(folder, gmm):
+    return kp, descriptors
+
+def predict_sift_descriptors_histogram(kp,descriptors,k,kmeans):
+    histogram_sift_words = np.zeros(k)
+    nkp = np.size(kp)
+
+
+    for d in descriptors:
+        idx = kmeans.predict([d])
+        try:
+            histogram_sift_words[idx] += 1 / nkp  # Because we need normalized histograms, I prefere to add 1/nkp directly
+        except:
+            foo=0
+    return histogram_sift_words
+
+def get_global_features(file, k, kmeans):
+    # print(file)
+    img = cv2.imread(file, 0)
+    # print(file)
+    # contour_global(img)
+    img = cv2.resize(img, (512, 512))
+    zernike_moments = zernike.get_features(img, radius=21)
+
+    kp, des = extract_sift_features(file)
+    histogram_sift_words = predict_sift_descriptors_histogram(kp,des,k,kmeans)
+    global_features = np.append(zernike_moments, histogram_sift_words)
+
+    return global_features
+
+def get_fisherLocals_plus_globals(file, k, kmeans):
+    fv_local_features = fisher_vector(get_vector_descriptors_all_image_patches(file), *gmm)
+    global_features = get_global_features(file, k, kmeans)
+    fisherLocals_plus_globals = np.append(fv_local_features, global_features)
+    return fisherLocals_plus_globals
+
+def get_LocalsWithoutFisher(file, k, kmeans):
+    local_features = get_vector_descriptors_all_image_patches(file)
+    return local_features
+
+def get_fisher_vectors_plus_globals_from_folder(folder, k, kmeans):
+    files = glob.glob(folder + "/*.tif")
+    return np.float32([get_fisherLocals_plus_globals(file, k, kmeans) for file in files])
+
+
+def fisher_features_plus_global_features(folder, k, kmeans):
     folders = glob.glob(folder + "/*")
-    features = {f: get_fisher_vectors_from_folder(f, gmm) for f in folders}
+    features = {f: get_fisher_vectors_plus_globals_from_folder(f, k, kmeans) for f in folders}
     return features
 
 
@@ -290,48 +486,56 @@ if __name__ == '__main__':
     working_folder = '/home/ubuntu/Escritorio/training'
     working_folder_test = '/home/ubuntu/Escritorio/test'
 
-    print("ENTRANDO A GENERAR GMM")
-
-    #gmm = load_gmm(working_folder)
-    #Descomentar aqui si no ha sido generado gmm
-
-    #gmm = generate_gmm(working_folder, args.number)
 
 
-    #gmm = load_gmm(working_folder) if args.loadgmm else generate_gmm(working_folder, 5)
-    gmm = load_gmm(model_folder)
-    print("GMM GENERADO")
+    #for N in [8, 2, 5, 16, 10, 12, 7, 6, 4, 3, 9, 15]:
+    for N in [5,9]:
+        print("N: "+str(N))
+        #gmm = load_gmm(working_folder)
+        #Descomentar aqui si no ha sido g
+        # enerado gmm
 
-    '''
-    print("ENTRANDO A GENERAR FISHER FEATURES TRAINING")
-    fisher_features_training = fisher_features(working_folder, gmm)
-    print("FISHER FEATURES TRAINING GENERADO")
-
-
-    # TBD, split the features into training and validation
-
-    
-    classifier = train(gmm, fisher_features_training)
-
-    rate = success_rate(classifier, fisher_features_training)
-    print("Success rate - validation -  is", rate)
-
-    
-
-    config_dictionary = {'remote_hostname': 'google.com', 'remote_port': 80}
-
-    with open('classifier.model', 'wb') as model_file:
-        pickle.dump(classifier, model_file)
-        print("Classification model saved")
-    '''
-
-    with open('classifier.model', 'rb') as model_file:
-        classifier = pickle.load(model_file)
-        print("Classification model loaded")
+        print("Entrando a generar BoF para almacenar SIFT")
+        k, kmeans = generate_bof(working_folder)
+        kmeans.verbose = False
 
 
-    print("Generando fisher vectors test")
-    fisher_features_test = fisher_features(working_folder_test, gmm)
-    rate_test = success_rate(classifier, fisher_features_test)
-    print("Success rate - validation -  is", rate_test)
-    foo =0
+        print("ENTRANDO A GENERAR GMM")
+        gmm = generate_gmm(working_folder, N, k, kmeans)
+
+
+        #gmm = load_gmm(working_folder) if args.loadgmm else generate_gmm(working_folder, 5)
+        gmm = load_gmm(model_folder)
+        print("GMM GENERADO")
+
+
+        print("ENTRANDO A GENERAR FISHER FEATURES TRAINING")
+        fisher_features_plus_globals_training = fisher_features_plus_global_features(working_folder, k, kmeans)
+        print("FISHER FEATURES TRAINING GENERADO")
+
+
+        # TBD, split the features into training and validation
+
+
+        classifier = train(gmm, fisher_features_plus_globals_training)
+
+        rate = success_rate(classifier, fisher_features_plus_globals_training)
+        print("Success rate - validation -  is", rate)
+
+
+
+
+        with open('classifier.model', 'wb') as model_file:
+            pickle.dump(classifier, model_file)
+            print("Classification model saved")
+
+
+        with open('classifier.model', 'rb') as model_file:
+            classifier = pickle.load(model_file)
+            print("Classification model loaded")
+
+
+        print("Generando fisher vectors test")
+        fisher_features_test = fisher_features_plus_global_features(working_folder_test, k, kmeans)
+        rate_test = success_rate(classifier, fisher_features_test)
+        print("Success rate - test -  is", rate_test)
