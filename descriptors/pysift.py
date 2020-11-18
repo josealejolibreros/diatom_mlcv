@@ -1,4 +1,4 @@
-from numpy import all, any, array, arctan2, cos, sin, exp, dot, log, logical_and, roll, sqrt, stack, trace, unravel_index, pi, deg2rad, rad2deg, where, zeros, floor, full, nan, isnan, round, float32
+from numpy import all, any, zeros, array, arctan2, cos, sin, exp, dot, log, logical_and, roll, sqrt, stack, trace, unravel_index, pi, deg2rad, rad2deg, where, zeros, floor, full, nan, isnan, round, float32
 from numpy.linalg import det, lstsq, norm
 from cv2 import resize, GaussianBlur, subtract, KeyPoint, INTER_LINEAR, INTER_NEAREST
 from functools import cmp_to_key
@@ -24,10 +24,20 @@ def computeKeypointsAndDescriptors(image, sigma=1.6, num_intervals=3, assumed_bl
     gaussian_kernels = generateGaussianKernels(sigma, num_octaves, num_intervals)
     gaussian_images = generateGaussianImages(base_image, num_octaves, gaussian_kernels)
     dog_images = generateDoGImages(gaussian_images)
-    keypoints = findScaleSpaceExtrema(gaussian_images, dog_images, num_intervals, sigma, image_border_width)
-    keypoints = removeDuplicateKeypoints(keypoints)
-    keypoints = convertKeypointsToInputImageSize(keypoints)
-    descriptors = generateDescriptors(keypoints, gaussian_images)
+
+    try:
+        keypoints = findScaleSpaceExtrema(gaussian_images, dog_images, num_intervals, sigma, image_border_width)
+        keypoints = removeDuplicateKeypoints(keypoints)
+        keypoints = convertKeypointsToInputImageSize(keypoints)
+        descriptors = generateDescriptors(keypoints, gaussian_images)
+    except:
+        keypoints = []
+
+    if (len(keypoints) == 0):
+        descriptors = zeros((1,128))
+    else:
+        print(len(keypoints))
+
     return keypoints, descriptors
 
 #########################

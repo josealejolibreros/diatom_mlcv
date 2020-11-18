@@ -3,11 +3,11 @@ import cv2
 from matplotlib import pyplot as plt
 
 import cv2
-import pysift
+from descriptors import pysift
 
 
 #img = cv2.imread('/media/ubuntu/DATA/diatoms_patches/ulnaria.tif', 0)
-img = cv2.imread('ulnaria.tif', 0)
+img = cv2.imread('e-1.tif', 0)
 keypoints, descriptors = pysift.computeKeypointsAndDescriptors(img)
 print(descriptors)
 #gray= cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
