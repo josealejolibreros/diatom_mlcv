@@ -8,6 +8,7 @@ from sklearn.ensemble import RandomForestClassifier
 from descriptors import fast, edge_histogram, lbp, hog, zernike, grey_co_ocurrence_properties, pysift
 import pickle
 from sklearn.cluster import MiniBatchKMeans
+import preprocessing
 
 import matplotlib.pyplot as plt
 from descriptors.contour_properties import Contour
@@ -57,6 +58,8 @@ def get_vector_descriptors_all_image_patches(file):
     img = cv2.imread(file, 0)
     #print(file)
     #contour_global(img)
+    img = preprocessing.preprocess_image(img)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     img = cv2.resize(img, (512, 512))
 
 
@@ -260,7 +263,15 @@ def likelihood_statistics(samples, means, covs, weights):
     gaussians, s0, s1, s2 = {}, {}, {}, {}
     samples_2 = zip(range(0, len(samples)), samples)
 
-    g = [multivariate_normal(mean=means[k], cov=covs[k]) for k in range(0, len(weights))]
+    try:
+
+        g = [multivariate_normal(mean=means[k], cov=covs[k]) for k in range(0, len(weights))]
+        print("singular")
+    except:
+
+        print("non singular")
+        g = [multivariate_normal(mean=means[k], cov=covs[k], allow_singular=True) for k in range(0, len(weights))]
+
     for index, x in samples_2:
         gaussians[index] = np.array([g_k.pdf(x) for g_k in g])
     del index,x
@@ -345,8 +356,13 @@ def generate_gmm(input_folder, N, k, kmeans):
     np.save("weights.gmm", weights)
     return means, covs, weights
 
-def generate_bof(input_folder):
+def define_k(input_folder):
     classes = len(glob.glob(input_folder + '/*'))
+    k = classes * 10
+    return k
+
+def generate_bof(input_folder):
+    k = define_k(input_folder)
     total_samples = 0
     for _, dirnames, filenames in os.walk(input_folder):
         # ^ this idiom means "we won't be using this value"
@@ -362,7 +378,7 @@ def generate_bof(input_folder):
 
 
     #step2
-    k = classes * 10
+
     print(k)
 
 
@@ -383,6 +399,7 @@ def folder_sift_description(folder):
 
 def extract_sift_features(file):
     img = cv2.imread(file,0)
+    img = preprocessing.preprocess_image(img)
     img = cv2.resize(img,(256,256))
     '''
     kp, descriptors = pysift.computeKeypointsAndDescriptors(img,
@@ -391,6 +408,8 @@ def extract_sift_features(file):
                                                             assumed_blur=0.5,
                                                             image_border_width=5)
     '''
+
+
     sift = cv2.xfeatures2d.SIFT_create()
     kp, descriptors = sift.detectAndCompute(img, None)
 
@@ -416,6 +435,8 @@ def predict_sift_descriptors_histogram(kp,descriptors,k,kmeans):
 def get_global_features(file, k, kmeans):
     # print(file)
     img = cv2.imread(file, 0)
+    img = preprocessing.preprocess_image(img)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     # print(file)
     # contour_global(img)
     img = cv2.resize(img, (512, 512))
@@ -489,19 +510,27 @@ if __name__ == '__main__':
 
 
     #for N in [8, 2, 5, 16, 10, 12, 7, 6, 4, 3, 9, 15]:
-    for N in [5,9]:
+    for N in [3,5,9]:
         print("N: "+str(N))
         #gmm = load_gmm(working_folder)
         #Descomentar aqui si no ha sido g
         # enerado gmm
 
-        print("Entrando a generar BoF para almacenar SIFT")
-        k, kmeans = generate_bof(working_folder)
+        #To generate Kmeans BoF uncomment here:
+        #print("Entrando a generar BoF para almacenar SIFT")
+        #k, kmeans = generate_bof(working_folder)
+        #pickle.dump( kmeans, open( "kmeans_bof.p", "wb" ) )
+
+        #To open Kmeans file uncomment here:
+        k = define_k(working_folder)
+        kmeans = pickle.load(open("kmeans_bof.p", "rb"))
+
+
         kmeans.verbose = False
 
 
         print("ENTRANDO A GENERAR GMM")
-        gmm = generate_gmm(working_folder, N, k, kmeans)
+        #gmm = generate_gmm(working_folder, N, k, kmeans)
 
 
         #gmm = load_gmm(working_folder) if args.loadgmm else generate_gmm(working_folder, 5)

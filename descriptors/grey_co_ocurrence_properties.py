@@ -31,14 +31,15 @@ def get_features(image):
             asm = greycoprops(g, 'ASM')
             asm_desc.append(asm[0, 0])
 
+
             energy = greycoprops(g, 'energy')
             energy_desc.append(energy[0, 0])
 
             correlation = greycoprops(g, 'correlation')
             correlation_desc.append(correlation[0, 0])
 
-    grey_coocurrence_props_descriptors = np.concatenate([dissimilarity_desc,contrast_desc,homogeneity_desc,
-                                                         asm_desc,energy_desc,correlation_desc])
+    grey_coocurrence_props_descriptors = np.concatenate([dissimilarity_desc,contrast_desc,
+                                                         asm_desc])
 
 
     return grey_coocurrence_props_descriptors

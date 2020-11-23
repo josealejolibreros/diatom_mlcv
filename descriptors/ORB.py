@@ -25,6 +25,6 @@ for r in range(0,test_image.shape[0], windowsize_r):
         keypoints, descriptor = orb.detectAndCompute(window,None)
 
         frame=cv2.drawKeypoints(window, keypoints,np.array([]), color=(0, 255, 0), flags=0)
-        plt.imshow(frame), plt.show()
+        plt.imshow(window), plt.show()
         foo =0
 print(descriptor)
