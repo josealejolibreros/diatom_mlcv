@@ -39,9 +39,9 @@ def get_features(image, radius=21):
         #plt.show()
         queryFeatures = describe(outline, radius)
 
-        cv2.imshow("image", image)
-        cv2.imshow("outline", outline)
-        cv2.waitKeyEx(0)
+        #cv2.imshow("image", image)
+        #cv2.imshow("outline", outline)
+        #cv2.waitKeyEx(0)
     else:
         print("no hubo contornos zernike")
         queryFeatures = np.zeros(25)

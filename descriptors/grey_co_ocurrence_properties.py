@@ -6,8 +6,8 @@ import imutils
 import matplotlib.pyplot as plt
 from skimage.feature import greycomatrix,greycoprops
 def get_features(image):
-    sub_window_size_r = int(64 / 2)
-    sub_window_size_c = int(64 / 2)
+    sub_window_size_r = int(64 / 1)
+    sub_window_size_c = int(64 / 1)
     dissimilarity_desc = []
     contrast_desc = []
     homogeneity_desc = []
@@ -38,7 +38,7 @@ def get_features(image):
             correlation = greycoprops(g, 'correlation')
             correlation_desc.append(correlation[0, 0])
 
-    grey_coocurrence_props_descriptors = np.concatenate([dissimilarity_desc,contrast_desc,
+    grey_coocurrence_props_descriptors = np.concatenate([dissimilarity_desc,contrast_desc,correlation_desc,
                                                          asm_desc])
 
 

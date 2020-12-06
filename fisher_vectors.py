@@ -58,8 +58,11 @@ def get_vector_descriptors_all_image_patches(file):
     img = cv2.imread(file, 0)
     #print(file)
     #contour_global(img)
-    img = preprocessing.preprocess_image(img)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    #Uncomment here to activate preprocessing
+    #img = preprocessing.preprocess_image(img)
+    #img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
     img = cv2.resize(img, (512, 512))
 
 
@@ -198,8 +201,8 @@ def image_descriptors(img):
     # Edge histograms (dimension = 80)
     fv_edge_hist = np.hstack(edge_histogram.get_features(img))
     '''
-    hist_lbp = lbp.get_features(img)
-    fv_hog = hog.get_features(img,orientations=8, pixels_per_cell=(64, 64),
+    hist_lbp = lbp.get_features(img, numPoints=6)
+    fv_hog = hog.get_features(img,orientations=4, pixels_per_cell=(64, 64),
                                 cells_per_block=(1, 1), visualize=True)
     greycoprops_description_properties = grey_co_ocurrence_properties.get_features(img)
 
@@ -266,10 +269,10 @@ def likelihood_statistics(samples, means, covs, weights):
     try:
 
         g = [multivariate_normal(mean=means[k], cov=covs[k]) for k in range(0, len(weights))]
-        print("singular")
+        #print("singular")
     except:
 
-        print("non singular")
+        #print("non singular")
         g = [multivariate_normal(mean=means[k], cov=covs[k], allow_singular=True) for k in range(0, len(weights))]
 
     for index, x in samples_2:
@@ -347,9 +350,9 @@ def generate_gmm(input_folder, N, k, kmeans):
     means, covs, weights = dictionary(words, N)
     # Throw away gaussians with weights that are too small:
     th = 1.0 / N
-    means = np.float32([m for k, m in zip(range(0, len(weights)), means) if weights[k] > th])
-    covs = np.float32([m for k, m in zip(range(0, len(weights)), covs) if weights[k] > th])
-    weights = np.float32([m for k, m in zip(range(0, len(weights)), weights) if weights[k] > th])
+    #means = np.float32([m for k, m in zip(range(0, len(weights)), means) if weights[k] > th])
+    #covs = np.float32([m for k, m in zip(range(0, len(weights)), covs) if weights[k] > th])
+    #weights = np.float32([m for k, m in zip(range(0, len(weights)), weights) if weights[k] > th])
 
     np.save("means.gmm", means)
     np.save("covs.gmm", covs)
@@ -435,8 +438,12 @@ def predict_sift_descriptors_histogram(kp,descriptors,k,kmeans):
 def get_global_features(file, k, kmeans):
     # print(file)
     img = cv2.imread(file, 0)
-    img = preprocessing.preprocess_image(img)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    #uncomment here to activate preprocessing
+    #img = preprocessing.preprocess_image(img)
+    #img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+
     # print(file)
     # contour_global(img)
     img = cv2.resize(img, (512, 512))
@@ -510,11 +517,8 @@ if __name__ == '__main__':
 
 
     #for N in [8, 2, 5, 16, 10, 12, 7, 6, 4, 3, 9, 15]:
-    for N in [3,5,9]:
+    for N in [3,9,16,13]:
         print("N: "+str(N))
-        #gmm = load_gmm(working_folder)
-        #Descomentar aqui si no ha sido g
-        # enerado gmm
 
         #To generate Kmeans BoF uncomment here:
         #print("Entrando a generar BoF para almacenar SIFT")
@@ -528,12 +532,12 @@ if __name__ == '__main__':
 
         kmeans.verbose = False
 
-
+        #Uncomment here if GMM has not been generated before
         print("ENTRANDO A GENERAR GMM")
-        #gmm = generate_gmm(working_folder, N, k, kmeans)
+        gmm = generate_gmm(working_folder, N, k, kmeans)
 
 
-        #gmm = load_gmm(working_folder) if args.loadgmm else generate_gmm(working_folder, 5)
+
         gmm = load_gmm(model_folder)
         print("GMM GENERADO")
 
